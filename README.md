@@ -1,170 +1,129 @@
 # Local Context Adapter
 
-A prototype exploring how end users can leverage their own compute to overcome context window limitations of LLMs.
+A prototype exploring how end users can leverage their own compute to overcome context window limitations in large language models.
 
 ## The Problem
 
-Current LLMs have limited memory and context windows due to compute constraints. You:
+Current LLMs have limited memory and context windows due to compute constraints. Your conversation history with ChatGPT might span thousands of exchanges, but the model can only "see" a small window at a time. This means:
 
 - Models forget your preferences, past decisions, and personal context
-- - Every conversation starts from zero
-  - - Personalization is limited to what fits in the context window
-   
-    - ## The Proposal
-   
-    - What if users contributed their own compute to solve this?
-   
-    - This prototype demonstrates a **local context adapter** that:
-   
-    - 1. **Runs on the user's machine** – using their CPU/GPU resources
-      2. 2. **Processes their full conversation history** – not limited by API context window
-         3. 3. **Generates structured context packages** – ready to send to a cloud model for final verification
-           
-            4. The architecture splits the work:
-           
-            5. ```
-               User Query
-               ↓
-               [LOCAL: User's Computer]
-               → Semantic search over full personal history
-               → Local LLM extracts relevant preferences and context
-               → Outputs structured JSON context package
-               ↓
-               [CLOUD: API Model]
-               → Receives query + personalized context package
-               → Generates final response with full user context
-               ...
-               ```
+- Every conversation starts from zero
+- Personalization is limited to what fits in the context window
 
-               ## Why This Matters
+## The Proposal
 
-               **Compute**: Users have idle compute on laptops and phones. Local models (Phi-3, LLama models) can run them.
+What if users contributed their own compute to solve this?
 
-               **Personalization**: Instead of fitting your history into a context window, the local adapter serves up your preferences and context to the cloud model.
+This prototype demonstrates a **local context adapter** that:
 
-               **Data Ownership**: Your personal data never leaves your machine. Only a structured context package is sent to the API.
+1. **Runs on the user's machine** — using their CPU/GPU resources
+2. **Processes their full conversation history** — not limited by API context windows
+3. **Generates structured context packages** — ready to send to a cloud model for final response
 
-               ## How It Works
+The architecture splits the work:
+```
+User Query
+    ↓
+[LOCAL: User's Computer]
+    → Semantic search over full personal history
+    → Local LLM extracts relevant preferences and context
+    → Outputs structured JSON context package
+    ↓
+[CLOUD: API Model]
+    → Receives query + personalized context package
+    → Generates final response with full user context
+```
 
-               1. **Data Processing** (`load_data.py`): Parses ChatGPT export (581 conversations → embeddings)
-              
-               2. 2. **Semantic Index** (`build_index.py`): Creates vector embeddings using sentence-transformers
-                 
-                  3. 3. **Context Adapter** (`adapter.py`):
-                     4.    - Takes a user query
-                           -    - Finds the 5 most relevant chunks from personal history
-                                -    - Asks local Phi-3 to generate a structured context package containing:
-                                     -      - User intent
-                                     -       - Relevant preferences from history
-                                     -        - Context summary
-                                     -         - Suggested approach for the cloud model
-                                 
-                                     -     ## Example Output
-                                 
-                                     - Query: "What should I eat for dinner?"
-                                 
-                                     - The adapter searches personal history, finds past conversations about cooking preferences.
-                                 
-                                     - ```json
-                                       {
-                                         "user_intent": "Seeking a simple dinner option",
-                                         "relevant_preferences": [
-                                           "Interest in self-cooked dinners without professional culinary skills",
-                                           "Needs recipes accommodating vegetarian friends",
-                                           "Prefers minimal cooking equipment"
-                                         ],
-                                         "context_summary": "User frequently asks about simple meals, has hosted vegetarian dinners",
-                                         "suggested_approach": "Suggest simple vegetarian-friendly options that don't require advanced cooking techniques"
-                                       }
-                                       ...
-                                       ```
+## Why This Matters
 
-                                       This context package would then be sent alongside the query to a cloud model (GPT-4, Claude, etc) to generate a more personalized response.
+**Compute**: Users have idle compute on laptops and phones. Local models (Phi-3, LLaMA, etc.) are now capable enough to handle context curation tasks.
 
-                                       ## Running It
+**Personalization**: Instead of fitting your history into a context window, the local adapter searches your entire history and extracts only what's relevant.
 
-                                       You'll need:
-                                       - Python 3.9+
-                                       - - Phi-3 Mini (4B model, ~2.4 GB)
-                                         - - sentence-transformers
-                                           - - A ChatGPT export JSON file
-                                            
-                                             - Steps:
-                                            
-                                             - 1. **Export your data** from ChatGPT
-                                               2. 2. **Load and process** your conversation history:
-                                                  3. ```bash
-                                                     python load_data.py your_export.json
-                                                     ```
+**Data Ownership**: Your personal data never leaves your machine. Only a structured summary is sent to the cloud model — you control what context gets shared.
 
-                                                     3. **Build the semantic index**:
-                                                     4. ```bash
-                                                        python build_index.py
-                                                        ```
+## How It Works
 
-                                                        4. **Run the context adapter**:
-                                                        5. ```bash
-                                                           python adapter.py
-                                                           ```
+1. **Data Processing** (`load_data.py`): Parses ChatGPT export (581 conversations → 5858 searchable chunks)
 
-                                                           Then, find this part at the end of the `generate_context_package` function:
+2. **Semantic Index** (`build_index.py`): Creates vector embeddings using sentence-transformers for similarity search
 
-                                                           ```python
-                                                           response = ask_phi3(prompt)
-                                                           return response, relevant
-                                                           ```
+3. **Context Adapter** (`adapter.py`): 
+   - Takes a user query
+   - Finds the 5 most relevant chunks from personal history
+   - Asks local Phi-3 to generate a structured context package containing:
+     - User intent
+     - Relevant preferences from history
+     - Context summary
+     - Suggested approach for the cloud model
 
-                                                           Replace it with:
+## Example Output
 
-                                                           ```python
-                                                           # Validate JSON
-                                                           try:
-                                                               valid_json = json.loads(response)
-                                                           except json.JSONDecodeError:
-                                                               # Retry if JSON is invalid
-                                                               pass
+Query: "What should I eat for dinner?"
 
-                                                           if __name__ == "__main__":
-                                                               # Test it
-                                                               test_query = "Help me plan a trip"
+The adapter searches personal history, finds past conversations about cooking preferences, dietary constraints, and meal planning, then generates:
+```json
+{
+  "user_intent": "Seeking a simple dinner option",
+  "relevant_preferences": [
+    "Interest in self-cooked dinners without professional culinary skills",
+    "Needs recipes accommodating vegetarian friends",
+    "Prefers minimal cooking equipment"
+  ],
+  "context_summary": "User frequently asks about simple meals, has hosted vegetarian guests before, expressed interest in pasta dishes and quick recipes",
+  "suggested_approach": "Suggest simple vegetarian-friendly options that don't require complex preparation"
+}
+```
 
-                                                               print("\n=== Local Context Adapter ===")
-                                                               print("Type a query to get personalized context, or 'quit' to exit.\n")
+This context package would then be sent alongside the query to a cloud model (GPT-4, Claude, etc.) for the final response.
 
-                                                               while True:
-                                                                   query = input("Your query: ").strip()
-                                                                   if query.lower() in ['quit', 'exit', 'q']:
-                                                                       break
+## Requirements
 
-                                                                   if not query:
-                                                                       continue
+- Python 3.11+
+- 8GB+ RAM
+- ~2GB disk space for models
 
-                                                                   print("\nGenerating context package...")
-                                                                   result, relevant_chunks = generate_context_package(query)
+## Setup
 
-                                                                   print("\n--- Relevant chunks found ---")
-                                                                   for chunk, score in relevant_chunks:
-                                                                       print(f"[{score:.3f}] {chunk['title']}: {chunk['text'][:500]}...")
+1. Install dependencies:
+```
+pip install requests sentence-transformers numpy
+```
 
-                                                                   print("\n--- Context package ---")
-                                                                   print(json.dumps(result, indent=2))
-                                                                   print("\n" + "="*50 + "\n")
-                                                           ```
+2. Install Ollama and pull Phi-3:
+```
+ollama pull phi3:mini
+```
 
-                                                           ## What's Next
+3. Export your ChatGPT data (Settings → Data Controls → Export) and place `conversations.json` in this folder
 
-                                                           - Implement end-to-end integration with a cloud API
-                                                           - - Add support for different local models
-                                                             - - Test with different prompt engineering techniques
-                                                               - - Explore streaming responses
-                                                                 - - Add conversation memory to the adapter itself
-                                                                  
-                                                                   - ## Got ideas?
-                                                                  
-                                                                   - This is a prototype. If you have thoughts on:
-                                                                   - - How to better extract context from personal history
-                                                                     - - More efficient ways to package user context
-                                                                       - - Privacy/security considerations
-                                                                         - - Integration with different LLM providers
-                                                                          
-                                                                           - Drop an issue or PR!
+4. Build the search index:
+```
+python build_index.py
+```
+
+5. Run the adapter:
+```
+python adapter.py
+```
+
+## Limitations
+
+- Prototype only — not production-ready
+- Local inference is slow on CPU (~30-60 seconds per query)
+- JSON output sometimes malformed (Phi-3 limitation)
+- No integration with cloud API yet (intentionally scoped down)
+
+## Future Directions
+
+- **Incremental indexing**: Update the index as new conversations happen
+- **Preference learning**: Fine-tune a small LoRA on user's communication style
+- **Privacy controls**: Let users exclude sensitive topics from the index
+- **Multi-source support**: Discord, email, notes — not just ChatGPT
+- **Client integration**: Browser extension or native app that intercepts queries
+
+## Author
+
+Built as a prototype for exploring user-owned AI personalization.
+
+
