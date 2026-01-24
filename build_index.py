@@ -1,28 +1,27 @@
-"""
-Semantic Index Builder
-
-Creates vector embeddings from conversation data using sentence-transformers.
-"""
-
-from typing import List, Dict
+import json
 import numpy as np
+from sentence_transformers import SentenceTransformer
+from load_data import load_conversations
 
-class SemanticIndex:
-      """Build and query semantic index of conversations."""
-
-    def __init__(self):
-              self.embeddings = []
-              self.metadata = []
-
-    def build(self, conversations: List[Dict]) -> None:
-              """Build semantic index from conversations."""
-              print(f"Building index for {len(conversations)} conversations...")
-              # Initialize embeddings
-
-    def search(self, query: str, top_k: int = 5) -> List[Dict]:
-              """Search for relevant chunks using semantic similarity."""
-              # Implement semantic search
-              return []
+def build_index():
+    """Create embeddings for all chunks and save them."""
+    print("Loading conversations...")
+    chunks = load_conversations()
+    
+    print("Loading embedding model (first time takes a minute)...")
+    model = SentenceTransformer('all-MiniLM-L6-v2')
+    
+    print(f"Creating embeddings for {len(chunks)} chunks...")
+    texts = [f"{c['title']}: {c['text']}" for c in chunks]
+    embeddings = model.encode(texts, show_progress_bar=True)
+    
+    # Save everything
+    print("Saving index...")
+    np.save("embeddings.npy", embeddings)
+    with open("chunks.json", "w", encoding="utf-8") as f:
+        json.dump(chunks, f, ensure_ascii=False)
+    
+    print(f"Done! Saved {len(chunks)} chunks with embeddings.")
 
 if __name__ == "__main__":
-      print("Building semantic index...")
+    build_index()
